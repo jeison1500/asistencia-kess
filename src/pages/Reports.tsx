@@ -2,6 +2,8 @@ import React, { useState } from 'react';
 import { supabase } from '../supabaseClient';
 import NavBar from '../components/NavBar';
 import Swal from 'sweetalert2';
+import './Dashboard.css';
+
 
 interface Employee {
   cedula: string;
