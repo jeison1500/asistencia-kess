@@ -201,11 +201,11 @@ const Dashboard: React.FC = () => {
                 <td>{summary.employee.numero_cuenta}</td>
                 <td>{summary.employee.tipo_cuenta}</td>
                 <td>{summary.employee.banco}</td>
-                <td>{summary.employee.salario_diario.toLocaleString()}</td>
-                <td>{summary.employee.salario_mensual.toLocaleString()}</td>
+                <td>{Number(summary.employee.salario_diario).toLocaleString()}</td>
+                <td>{Number(summary.employee.salario_mensual).toLocaleString()}</td>
                 <td>{summary.datesWorked.size}</td>
                 <td>{summary.effectiveDays}</td>
-                <td>${summary.computedPayment.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                <td> ${Number(summary.computedPayment).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
               </tr>
             ))}
           </tbody>
