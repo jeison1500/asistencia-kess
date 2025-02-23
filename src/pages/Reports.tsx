@@ -43,43 +43,40 @@ const Dashboard: React.FC = () => {
       return;
     }
 
-    // Consulta registros de asistencia en el rango de fechas, haciendo join con empleados (relación por "cedula")
-    let query = supabase
+    // Usamos una cadena de una sola línea en select para evitar problemas de formato
+    const { data, error } = await supabase
       .from('asistencia')
-      .select(`
-        id,
-        entrada,
-        empleados:empleados(cedula, nombre, apellido, numero_cuenta, tipo_cuenta, banco, salario_diario, salario_mensual, sede)
-      `)
+      .select("id, entrada, empleados:empleados(cedula, nombre, apellido, numero_cuenta, tipo_cuenta, banco, salario_diario, salario_mensual, sede)")
       .gte('entrada', fechaInicio)
       .lte('entrada', fechaFin);
 
-    const { data, error } = await query;
     if (error) {
       Swal.fire("Error", error.message, "error");
       return;
     }
-    if (!data) {
+    if (!data || !Array.isArray(data)) {
       Swal.fire("Error", "No se encontraron registros.", "error");
       return;
     }
-    const records = data as AttendanceRecord[];
+    // Forzamos el tipado sin alterar la lógica
+    const records = (data as unknown as AttendanceRecord[]) ?? [];
 
     // Agrupar registros por empleado (clave: cedula)
     const summaryMap: { [cedula: string]: EmployeeSummary } = {};
     records.forEach((record: AttendanceRecord) => {
-      if (!record.empleados) return;
       const emp = record.empleados;
-      // Filtro por sede y por búsqueda de empleado (nombre, apellido o cédula)
+      if (!emp) return; // Evita registros sin datos de empleado
+      // Filtro por sede
       if (sedeFilter !== 'TODAS' && emp.sede.toUpperCase() !== sedeFilter.toUpperCase()) return;
+      // Filtro por búsqueda de empleado (nombre, apellido o cédula)
       if (
         empleadoFilter &&
         !emp.nombre.toLowerCase().includes(empleadoFilter.toLowerCase()) &&
         !emp.apellido.toLowerCase().includes(empleadoFilter.toLowerCase()) &&
         !emp.cedula.includes(empleadoFilter)
-      )
+      ) {
         return;
-
+      }
       // Extraer solo la fecha (sin hora)
       const dateOnly = new Date(record.entrada).toLocaleDateString();
       if (!summaryMap[emp.cedula]) {
@@ -95,7 +92,7 @@ const Dashboard: React.FC = () => {
 
     // Procesar cada empleado para calcular días trabajados y pago
     const summaryArray: EmployeeSummary[] = [];
-    for (let cedula in summaryMap) {
+    for (const cedula in summaryMap) {
       const summary = summaryMap[cedula];
       const totalDays = summary.datesWorked.size;
       let payment = 0;
@@ -104,7 +101,7 @@ const Dashboard: React.FC = () => {
         payment = summary.employee.salario_diario * totalDays;
         summary.effectiveDays = totalDays;
       } else {
-        // Para empleados de REDES: se separa la asistencia en dos quincenas
+        // Para empleados de REDES: separar la asistencia en dos quincenas
         let firstHalfCount = 0;  // días del 1 al 15
         let secondHalfCount = 0; // días del 16 en adelante
         summary.datesWorked.forEach(dateStr => {
