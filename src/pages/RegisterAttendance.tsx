@@ -13,13 +13,21 @@ const RegisterAttendance: React.FC = () => {
       return;
     }
     
-    // Obtener la fecha actual y calcular inicio y fin del día
+    // Obtener la fecha y hora actual
     const now = new Date();
     const nowIso = now.toISOString();
     const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString();
     const endOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999).toISOString();
-
+    
+    // Verificar si es entrada y si la hora es mayor a las 07:30 AM
     if (tipo === 'entrada') {
+      const hour = now.getHours();
+      const minutes = now.getMinutes();
+      if (hour < 7 || (hour === 7 && minutes < 30)) {
+        Swal.fire("Error", "Solo se permite registrar la entrada después de las 07:30 AM.", "error");
+        return;
+      }
+      
       // Verificar si ya existe una entrada para el mismo día
       const { data: existingEntries, error: queryError } = await supabase
         .from('asistencia')
@@ -46,7 +54,6 @@ const RegisterAttendance: React.FC = () => {
         Swal.fire("Error", error.message, "error");
       } else {
         Swal.fire("Éxito", "Entrada registrada.", "success");
-        // Limpiar el formulario
         setCedula('');
         setTipo('entrada');
       }
@@ -102,7 +109,6 @@ const RegisterAttendance: React.FC = () => {
         Swal.fire("Error", error.message, "error");
       } else {
         Swal.fire("Éxito", "Salida registrada.", "success");
-        // Limpiar el formulario
         setCedula('');
         setTipo('entrada');
       }
