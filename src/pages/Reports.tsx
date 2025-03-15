@@ -2,8 +2,10 @@ import React, { useState } from 'react';
 import { supabase } from '../supabaseClient';
 import NavBar from '../components/NavBar';
 import Swal from 'sweetalert2';
+import { jsPDF } from "jspdf";
+import "jspdf-autotable";
+import * as XLSX from "xlsx";
 import './Dashboard.css';
-
 
 interface Employee {
   cedula: string;
@@ -20,24 +22,28 @@ interface Employee {
 interface AttendanceRecord {
   id: number;
   entrada: string;
-  // Relación con empleados a través de "cedula"
   empleados: Employee;
 }
 
 interface EmployeeSummary {
   employee: Employee;
-  datesWorked: Set<string>;
+  datesWorked: Set<number>;
   effectiveDays: number;
   computedPayment: number;
+  dailySalary: number;
+  biweeklySalary: number;
 }
 
 const Dashboard: React.FC = () => {
   const [fechaInicio, setFechaInicio] = useState<string>('');
   const [fechaFin, setFechaFin] = useState<string>('');
   const [sedeFilter, setSedeFilter] = useState<string>('TODAS');
-  const [empleadoFilter, setEmpleadoFilter] = useState<string>(''); // Filtra por nombre, apellido o cédula
+  const [empleadoFilter, setEmpleadoFilter] = useState<string>('');
   const [summaryList, setSummaryList] = useState<EmployeeSummary[]>([]);
   const [totalPayroll, setTotalPayroll] = useState<number>(0);
+  const [totalDaysWorked, setTotalDaysWorked] = useState<number>(0);
+
+  const formatNumber = (num: number) => num.toLocaleString();
 
   const handleFiltrar = async () => {
     if (!fechaInicio || !fechaFin) {
@@ -45,7 +51,6 @@ const Dashboard: React.FC = () => {
       return;
     }
 
-    // Usamos una cadena de una sola línea en select para evitar problemas de formato
     const { data, error } = await supabase
       .from('asistencia')
       .select("id, entrada, empleados:empleados(cedula, nombre, apellido, numero_cuenta, tipo_cuenta, banco, salario_diario, salario_mensual, sede)")
@@ -60,17 +65,14 @@ const Dashboard: React.FC = () => {
       Swal.fire("Error", "No se encontraron registros.", "error");
       return;
     }
-    // Forzamos el tipado sin alterar la lógica
-    const records = (data as unknown as AttendanceRecord[]) ?? [];
 
-    // Agrupar registros por empleado (clave: cedula)
+    const records = (data as unknown as AttendanceRecord[]) ?? [];
     const summaryMap: { [cedula: string]: EmployeeSummary } = {};
+
     records.forEach((record: AttendanceRecord) => {
       const emp = record.empleados;
-      if (!emp) return; // Evita registros sin datos de empleado
-      // Filtro por sede
+      if (!emp) return;
       if (sedeFilter !== 'TODAS' && emp.sede.toUpperCase() !== sedeFilter.toUpperCase()) return;
-      // Filtro por búsqueda de empleado (nombre, apellido o cédula)
       if (
         empleadoFilter &&
         !emp.nombre.toLowerCase().includes(empleadoFilter.toLowerCase()) &&
@@ -79,87 +81,80 @@ const Dashboard: React.FC = () => {
       ) {
         return;
       }
-      // Extraer solo la fecha (sin hora)
-      const dateOnly = new Date(record.entrada).toLocaleDateString();
+      const dayOfMonth = new Date(record.entrada).getDate();
+
       if (!summaryMap[emp.cedula]) {
         summaryMap[emp.cedula] = {
           employee: emp,
-          datesWorked: new Set<string>(),
+          datesWorked: new Set<number>(),
           effectiveDays: 0,
           computedPayment: 0,
+          dailySalary: Math.round(emp.salario_diario),
+          biweeklySalary: Math.round(emp.salario_mensual / 2),
         };
       }
-      summaryMap[emp.cedula].datesWorked.add(dateOnly);
+
+      if (emp.sede.toUpperCase() === "REDES" && dayOfMonth === 31) return;
+
+      summaryMap[emp.cedula].datesWorked.add(dayOfMonth);
     });
 
-    // Procesar cada empleado para calcular días trabajados y pago
     const summaryArray: EmployeeSummary[] = [];
+    let totalPayrollSum = 0;
+    let totalDaysWorkedSum = 0;
+
     for (const cedula in summaryMap) {
       const summary = summaryMap[cedula];
-      const totalDays = summary.datesWorked.size;
-      let payment = 0;
-      if (summary.employee.sede.toUpperCase() !== 'REDES') {
-        // Para sedes que no son de REDES: pago = salario_diario * días trabajados
-        payment = summary.employee.salario_diario * totalDays;
-        summary.effectiveDays = totalDays;
-      } else {
-        // Para empleados de REDES: separar la asistencia en dos quincenas
-        let firstHalfCount = 0;  // días del 1 al 15
-        let secondHalfCount = 0; // días del 16 en adelante
-        summary.datesWorked.forEach(dateStr => {
-          const d = new Date(dateStr);
-          const day = d.getDate();
-          if (day <= 15) firstHalfCount++;
-          else secondHalfCount++;
+      summary.effectiveDays = summary.datesWorked.size;
+      let payment = summary.effectiveDays * summary.dailySalary;
+
+      if (summary.employee.sede.toUpperCase() === "REDES") {
+        let firstHalfDays = 0;
+        let secondHalfDays = 0;
+
+        summary.datesWorked.forEach(day => {
+          if (day <= 15) firstHalfDays++;
+          else secondHalfDays++;
         });
-        // Primera quincena: si trabaja de 1 a 13 días, se paga proporcionalmente; si llega a 14 o más, se le paga 14 días.
-        const firstHalfPayment =
-          (summary.employee.salario_mensual / 30) *
-          (firstHalfCount < 14 ? firstHalfCount : 14);
-        // Segunda quincena: si trabaja de 1 a 14 días, se paga proporcionalmente; si alcanza 15 o más, se le paga 15 días.
-        const secondHalfPayment =
-          (summary.employee.salario_mensual / 30) *
-          (secondHalfCount < 15 ? secondHalfCount : 15);
+
+        let firstHalfPayment =
+          firstHalfDays >= 14
+            ? summary.biweeklySalary / 2
+            : firstHalfDays * (summary.employee.salario_mensual / 30);
+
+        let secondHalfPayment =
+          secondHalfDays >= 15
+            ? summary.biweeklySalary / 2
+            : secondHalfDays * (summary.employee.salario_mensual / 30);
+
         payment = firstHalfPayment + secondHalfPayment;
-        summary.effectiveDays = firstHalfCount + secondHalfCount;
       }
-      summary.computedPayment = payment;
+
+      summary.computedPayment = Math.round(payment);
+      totalPayrollSum += summary.computedPayment;
+      totalDaysWorkedSum += summary.effectiveDays;
       summaryArray.push(summary);
     }
 
-    // Calcular total de nómina
-    const total = summaryArray.reduce((acc, curr) => acc + curr.computedPayment, 0);
     setSummaryList(summaryArray);
-    setTotalPayroll(total);
+    setTotalPayroll(totalPayrollSum);
+    setTotalDaysWorked(totalDaysWorkedSum);
   };
 
   return (
     <div className="container">
       <NavBar />
       <h2>Dashboard de Nómina</h2>
-      <div style={{ marginBottom: '20px' }}>
-        <label>
-          Fecha Inicio:
-          <input
-            type="date"
-            value={fechaInicio}
-            onChange={e => setFechaInicio(e.target.value)}
-          />
+
+      <div>
+        <label>Fecha Inicio:
+          <input type="date" value={fechaInicio} onChange={e => setFechaInicio(e.target.value)} />
         </label>
-        <label style={{ marginLeft: '10px' }}>
-          Fecha Fin:
-          <input
-            type="date"
-            value={fechaFin}
-            onChange={e => setFechaFin(e.target.value)}
-          />
+        <label>Fecha Fin:
+          <input type="date" value={fechaFin} onChange={e => setFechaFin(e.target.value)} />
         </label>
-        <label style={{ marginLeft: '10px' }}>
-          Sede:
-          <select
-            value={sedeFilter}
-            onChange={e => setSedeFilter(e.target.value)}
-          >
+        <label>Sede:
+          <select value={sedeFilter} onChange={e => setSedeFilter(e.target.value)}>
             <option value="TODAS">TODAS</option>
             <option value="METROCENTRO">METROCENTRO</option>
             <option value="NUESTRO ATLANTICO">NUESTRO ATLANTICO</option>
@@ -167,33 +162,14 @@ const Dashboard: React.FC = () => {
             <option value="CENTRO">CENTRO</option>
           </select>
         </label>
-        <label style={{ marginLeft: '10px' }}>
-          Empleado (Nombre, Apellido o Cédula):
-          <input
-            type="text"
-            value={empleadoFilter}
-            onChange={e => setEmpleadoFilter(e.target.value)}
-          />
-        </label>
-        <button onClick={handleFiltrar} style={{ marginLeft: '10px' }}>
-          Filtrar
-        </button>
+        <button onClick={handleFiltrar}>Filtrar</button>
       </div>
 
-      <h3>Detalle de Empleados</h3>
       {summaryList.length > 0 ? (
         <table>
           <thead>
             <tr>
-              <th>Empleado</th>
-              <th>Número de Cuenta</th>
-              <th>Tipo de Cuenta</th>
-              <th>Banco</th>
-              <th>Salario Diario</th>
-              <th>Salario Mensual</th>
-              <th>Días Trabajados</th>
-              <th>Días Efectivos</th>
-              <th>Pago Calculado</th>
+              <th>Empleado</th><th>N° Cuenta</th><th>Banco</th><th>Días Trabajados</th><th>Valor Día</th><th>Valor Quincena</th><th>Pago</th>
             </tr>
           </thead>
           <tbody>
@@ -201,22 +177,27 @@ const Dashboard: React.FC = () => {
               <tr key={summary.employee.cedula}>
                 <td>{summary.employee.nombre} {summary.employee.apellido}</td>
                 <td>{summary.employee.numero_cuenta}</td>
-                <td>{summary.employee.tipo_cuenta}</td>
                 <td>{summary.employee.banco}</td>
-                <td>{Number(summary.employee.salario_diario).toLocaleString()}</td>
-                <td>{Number(summary.employee.salario_mensual).toLocaleString()}</td>
-                <td>{summary.datesWorked.size}</td>
-                <td>{summary.effectiveDays}</td>
-                <td> ${Number(summary.computedPayment).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                <td>{formatNumber(summary.effectiveDays)}</td>
+                <td>${formatNumber(summary.dailySalary)}</td>
+                <td>${formatNumber(summary.biweeklySalary)}</td>
+                <td>${formatNumber(summary.computedPayment)}</td>
               </tr>
             ))}
           </tbody>
+          <tfoot>
+            <tr>
+              <td colSpan={3}><strong>Total:</strong></td>
+              <td><strong>{formatNumber(totalDaysWorked)}</strong></td>
+              <td></td>
+              <td></td>
+              <td><strong>${formatNumber(totalPayroll)}</strong></td>
+            </tr>
+          </tfoot>
         </table>
       ) : (
-        <p>No se encontraron registros con el filtro aplicado.</p>
+        <p>No hay datos disponibles. Realiza una búsqueda.</p>
       )}
-
-      <h3>Total a Pagar de la Nómina: ${totalPayroll.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</h3>
     </div>
   );
 };
