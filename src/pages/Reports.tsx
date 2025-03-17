@@ -36,7 +36,7 @@ const Dashboard: React.FC = () => {
   const [fechaInicio, setFechaInicio] = useState<string>('');
   const [fechaFin, setFechaFin] = useState<string>('');
   const [sedeFilter, setSedeFilter] = useState<string>('TODAS');
-  const [empleadoFilter, setEmpleadoFilter] = useState('');
+  const [empleadoFilter, setEmpleadoFilter] = useState<string>('');
   const [summaryList, setSummaryList] = useState<EmployeeSummary[]>([]);
   const [totalPayroll, setTotalPayroll] = useState<number>(0);
   const [totalDaysWorked, setTotalDaysWorked] = useState<number>(0);
@@ -56,28 +56,87 @@ const Dashboard: React.FC = () => {
       .lte('entrada', fechaFin);
 
     if (error) {
-      console.error("Error en la consulta de Supabase:", error.message);
       Swal.fire("Error", error.message, "error");
       return;
     }
-
-    if (!data || !Array.isArray(data) || data.length === 0) {
-      Swal.fire("Información", "No se encontraron registros para las fechas seleccionadas.", "info");
-      setSummaryList([]);
+    if (!data || !Array.isArray(data)) {
+      Swal.fire("Error", "No se encontraron registros.", "error");
       return;
     }
 
-    const records = data as AttendanceRecord[];
-    const summaryArray: EmployeeSummary[] = records.map(record => ({
-      employee: record.empleados,
-      datesWorked: new Set([new Date(record.entrada).getDate()]),
-      effectiveDays: 1,
-      computedPayment: record.empleados.salario_diario,
-      dailySalary: record.empleados.salario_diario,
-      biweeklySalary: Math.round(record.empleados.salario_mensual / 2),
-    }));
+    const records = (data as unknown as AttendanceRecord[]) ?? [];
+    const summaryMap: { [cedula: string]: EmployeeSummary } = {};
+
+    records.forEach((record: AttendanceRecord) => {
+      const emp = record.empleados;
+      if (!emp) return;
+      if (sedeFilter !== 'TODAS' && emp.sede.toUpperCase() !== sedeFilter.toUpperCase()) return;
+      if (
+        empleadoFilter &&
+        !emp.nombre.toLowerCase().includes(empleadoFilter.toLowerCase()) &&
+        !emp.apellido.toLowerCase().includes(empleadoFilter.toLowerCase()) &&
+        !emp.cedula.includes(empleadoFilter)
+      ) {
+        return;
+      }
+      const dayOfMonth = new Date(record.entrada).getDate();
+
+      if (!summaryMap[emp.cedula]) {
+        summaryMap[emp.cedula] = {
+          employee: emp,
+          datesWorked: new Set<number>(),
+          effectiveDays: 0,
+          computedPayment: 0,
+          dailySalary: Math.round(emp.salario_diario),
+          biweeklySalary: Math.round(emp.salario_mensual / 2),
+        };
+      }
+
+      if (emp.sede.toUpperCase() === "REDES" && dayOfMonth === 31) return;
+
+      summaryMap[emp.cedula].datesWorked.add(dayOfMonth);
+    });
+
+    const summaryArray: EmployeeSummary[] = [];
+    let totalPayrollSum = 0;
+    let totalDaysWorkedSum = 0;
+
+    for (const cedula in summaryMap) {
+      const summary = summaryMap[cedula];
+      summary.effectiveDays = summary.datesWorked.size;
+      let payment = summary.effectiveDays * summary.dailySalary;
+
+      if (summary.employee.sede.toUpperCase() === "REDES") {
+        let firstHalfDays = 0;
+        let secondHalfDays = 0;
+
+        summary.datesWorked.forEach(day => {
+          if (day <= 15) firstHalfDays++;
+          else secondHalfDays++;
+        });
+
+        let firstHalfPayment =
+          firstHalfDays >= 14
+            ? summary.biweeklySalary / 2
+            : firstHalfDays * (summary.employee.salario_mensual / 30);
+
+        let secondHalfPayment =
+          secondHalfDays >= 15
+            ? summary.biweeklySalary / 2
+            : secondHalfDays * (summary.employee.salario_mensual / 30);
+
+        payment = firstHalfPayment + secondHalfPayment;
+      }
+
+      summary.computedPayment = Math.round(payment);
+      totalPayrollSum += summary.computedPayment;
+      totalDaysWorkedSum += summary.effectiveDays;
+      summaryArray.push(summary);
+    }
 
     setSummaryList(summaryArray);
+    setTotalPayroll(totalPayrollSum);
+    setTotalDaysWorked(totalDaysWorkedSum);
   };
 
   return (
@@ -91,6 +150,15 @@ const Dashboard: React.FC = () => {
         </label>
         <label>Fecha Fin:
           <input type="date" value={fechaFin} onChange={e => setFechaFin(e.target.value)} />
+        </label>
+        <label>Sede:
+          <select value={sedeFilter} onChange={e => setSedeFilter(e.target.value)}>
+            <option value="TODAS">TODAS</option>
+            <option value="METROCENTRO">METROCENTRO</option>
+            <option value="NUESTRO ATLANTICO">NUESTRO ATLANTICO</option>
+            <option value="REDES">REDES</option>
+            <option value="CENTRO">CENTRO</option>
+          </select>
         </label>
         <button onClick={handleFiltrar}>Filtrar</button>
       </div>
@@ -115,6 +183,15 @@ const Dashboard: React.FC = () => {
               </tr>
             ))}
           </tbody>
+          <tfoot>
+            <tr>
+              <td colSpan={3}><strong>Total:</strong></td>
+              <td><strong>{formatNumber(totalDaysWorked)}</strong></td>
+              <td></td>
+              <td></td>
+              <td><strong>${formatNumber(totalPayroll)}</strong></td>
+            </tr>
+          </tfoot>
         </table>
       ) : (
         <p>No hay datos disponibles. Realiza una búsqueda.</p>
