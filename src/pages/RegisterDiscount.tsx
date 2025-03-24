@@ -28,13 +28,12 @@ const RegisterDiscount: React.FC = () => {
   }, []);
 
   const handleRegister = async () => {
-    const parsedMonto = parseFloat(monto);
+    const parsedMonto = parseFloat(monto.replace(/\./g, '').replace(',', '.'));
     if (!cedula || !tipoDescuento || isNaN(parsedMonto) || parsedMonto <= 0) {
       Swal.fire('Error', 'Todos los campos son obligatorios y el monto debe ser mayor a 0.', 'error');
       return;
     }
 
-    // Validar que el empleado existe
     const empleadoExiste = empleados.some(emp => emp.cedula === cedula);
     if (!empleadoExiste) {
       Swal.fire('Error', 'El empleado seleccionado no es válido.', 'error');
@@ -66,7 +65,7 @@ const RegisterDiscount: React.FC = () => {
     <div className="container">
       <NavBar />
       <h2>Registrar Descuento</h2>
-      
+
       <label htmlFor="empleado">Selecciona un empleado:</label>
       <select id="empleado" value={cedula} onChange={(e) => setCedula(e.target.value)}>
         <option value="">Selecciona un empleado</option>
@@ -80,20 +79,23 @@ const RegisterDiscount: React.FC = () => {
         <option value="">Selecciona un tipo de descuento</option>
         <option value="PRESTAMOS">PRESTAMOS</option>
         <option value="DESCUENTOS DE PRENDAS">DESCUENTOS DE PRENDAS</option>
-        <option value="PRENDAS">PRENDAS</option>
+        <option value="PRENDAS FALTANTES">PRENDAS FALTANTES</option>
         <option value="FLETES">FLETES</option>
         <option value="ABONOS A DESCUADRE DE CAJA">ABONOS A DESCUADRE DE CAJA</option>
+        <option value="DESCUENTO POR LLEGADA TARDE">DESCUENTO POR LLEGADA TARDE</option>
       </select>
 
       <label htmlFor="monto">Monto:</label>
       <input 
         id="monto"
-        type="number" 
+        type="text" 
         placeholder="Monto" 
         value={monto} 
-        min="0"
-        step="0.01"
-        onChange={(e) => setMonto(e.target.value.replace(/[^0-9.]/g, ''))} 
+        onChange={(e) => {
+          const raw = e.target.value.replace(/\D/g, '');
+          const formatted = new Intl.NumberFormat('es-ES').format(Number(raw));
+          setMonto(formatted);
+        }} 
       />
 
       <button onClick={handleRegister}>Registrar</button>
