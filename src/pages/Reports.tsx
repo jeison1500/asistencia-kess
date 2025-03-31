@@ -146,8 +146,19 @@ const Dashboard: React.FC = () => {
           if (day <= 15) firstHalfDays++;
           else secondHalfDays++;
         });
-        let firstHalfPayment = firstHalfDays >= 14 ? summary.biweeklySalary / 2 : firstHalfDays * (summary.employee.salario_mensual / 30);
-        let secondHalfPayment = secondHalfDays >= 15 ? summary.biweeklySalary / 2 : secondHalfDays * (summary.employee.salario_mensual / 30);
+        // Nuevo criterio: si trabajan 14 o más días en cualquier quincena, se les paga 15 días completos
+        const dailyRate = summary.employee.salario_mensual / 30;
+
+        let firstHalfPayment = firstHalfDays >= 14
+          ? dailyRate * 15
+          : firstHalfDays * dailyRate;
+        
+        let secondHalfPayment = secondHalfDays >= 14
+          ? dailyRate * 15
+          : secondHalfDays * dailyRate;
+        
+        
+
         payment = firstHalfPayment + secondHalfPayment;
       }
       const descuento = descuentosPorEmpleado[cedula] || 0;
