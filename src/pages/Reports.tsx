@@ -16,11 +16,13 @@ interface Employee {
   salario_diario: number;
   salario_mensual: number;
   sede: string;
+  descanso_trabajado?: boolean;
 }
 
 interface AttendanceRecord {
   id: number;
   entrada: string;
+  descanso_trabajado?: boolean; // ✅ ahora aquí, no en Employee
   empleados: Employee;
 }
 
@@ -39,6 +41,7 @@ interface EmployeeSummary {
   dailySalary: number;
   biweeklySalary: number;
   descuento?: number;
+  descanso_trabajado?: boolean; // ✅ nuevo campo
 }
 
 const Dashboard: React.FC = () => {
@@ -71,10 +74,11 @@ const Dashboard: React.FC = () => {
     }
 
     const { data, error } = await supabase
-      .from('asistencia')
-      .select("id, entrada, empleados:empleados(cedula, nombre, apellido, numero_cuenta, tipo_cuenta, banco, salario_diario, salario_mensual, sede)")
-      .gte('entrada', fechaInicio)
-      .lte('entrada', fechaFin);
+    .from('asistencia')
+    .select("id, entrada, descanso_trabajado, empleados:empleados(cedula, nombre, apellido, numero_cuenta, tipo_cuenta, banco, salario_diario, salario_mensual, sede)")
+    .gte('entrada', fechaInicio)
+    .lte('entrada', fechaFin);
+  
 
     if (error) {
       Swal.fire("Error", error.message, "error");
@@ -124,10 +128,16 @@ const Dashboard: React.FC = () => {
           computedPayment: 0,
           dailySalary: Math.round(emp.salario_diario),
           biweeklySalary: Math.round(emp.salario_mensual / 2),
+          descanso_trabajado: record.descanso_trabajado ?? false // ✅ aquí guardamos el valor
         };
       }
+      
       if (emp.sede.toUpperCase() === "REDES" && dayOfMonth === 31) return;
       summaryMap[emp.cedula].datesWorked.add(dayOfMonth);
+      if (record.descanso_trabajado) {
+        summaryMap[emp.cedula].descanso_trabajado = true;
+      }
+      
     });
 
     const summaryArray: EmployeeSummary[] = [];
@@ -139,28 +149,49 @@ const Dashboard: React.FC = () => {
       const summary = summaryMap[cedula];
       summary.effectiveDays = summary.datesWorked.size;
       let payment = summary.effectiveDays * summary.dailySalary;
+    
       if (summary.employee.sede.toUpperCase() === "REDES") {
         let firstHalfDays = 0;
         let secondHalfDays = 0;
+    
         summary.datesWorked.forEach(day => {
           if (day <= 15) firstHalfDays++;
           else secondHalfDays++;
         });
-        // Nuevo criterio: si trabajan 14 o más días en cualquier quincena, se les paga 15 días completos
+    
         const dailyRate = summary.employee.salario_mensual / 30;
+    
+        // ✅ Obtener descanso_trabajado desde algún registro
+        const descanso = summary.descanso_trabajado ?? false;
 
-        let firstHalfPayment = firstHalfDays >= 14
-          ? dailyRate * 15
-          : firstHalfDays * dailyRate;
-        
-        let secondHalfPayment = secondHalfDays >= 14
-          ? dailyRate * 15
-          : secondHalfDays * dailyRate;
-        
-        
 
+    
+        let firstHalfPayment = 0;
+        let secondHalfPayment = 0;
+    
+        if (firstHalfDays >= 14) {
+          firstHalfPayment = dailyRate * 15;
+          if (descanso && firstHalfDays <= 15) {
+            firstHalfPayment += dailyRate; // ✅ Día adicional
+            summary.effectiveDays += 1; // ✅ sumamos un día adicional
+          }
+        } else {
+          firstHalfPayment = firstHalfDays * dailyRate;
+        }
+    
+        if (secondHalfDays >= 14) {
+          secondHalfPayment = dailyRate * 15;
+          if (descanso && secondHalfDays <= 15) {
+            secondHalfPayment += dailyRate; // ✅ Día adicional
+            summary.effectiveDays += 1; // ✅ sumamos otro día si aplica
+          }
+        } else {
+          secondHalfPayment = secondHalfDays * dailyRate;
+        }
+    
         payment = firstHalfPayment + secondHalfPayment;
       }
+    
       const descuento = descuentosPorEmpleado[cedula] || 0;
       summary.computedPayment = Math.round(payment - descuento);
       summary.descuento = descuento;
@@ -169,6 +200,7 @@ const Dashboard: React.FC = () => {
       summaryArray.push(summary);
       resumenArray.push({ cedula, nombre: summary.employee.nombre, apellido: summary.employee.apellido, total: descuento });
     }
+    
 
     setSummaryList(summaryArray);
     setTotalPayroll(totalPayrollSum);
