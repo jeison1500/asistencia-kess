@@ -83,7 +83,7 @@ const RegisterDiscount: React.FC = () => {
         <option value="FLETES">FLETES</option>
         <option value="ABONOS A DESCUADRE DE CAJA">ABONOS A DESCUADRE DE CAJA</option>
         <option value="DESCUENTO POR LLEGADA TARDE">DESCUENTO POR LLEGADA TARDE</option>
-        <option value="DESCUENTO DESCANSO DOMINGO">DESCUENTO DESCANSO DIA DOMINGO </option>
+        <option value="DESCUENTO POR DÍA DE DESCANSO">DESCUENTO DESCANSO DIA DOMINGO </option>
       </select>
 
       <label htmlFor="monto">Monto:</label>
