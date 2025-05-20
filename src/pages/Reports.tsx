@@ -42,6 +42,7 @@ interface EmployeeSummary {
   biweeklySalary: number;
   descuento?: number;
   descanso_trabajado?: boolean; // ✅ nuevo campo
+  diasTarde?: string[]; // ✅ NUEVO
 }
 
 const Dashboard: React.FC = () => {
@@ -128,10 +129,30 @@ const Dashboard: React.FC = () => {
           computedPayment: 0,
           dailySalary: Math.round(emp.salario_diario),
           biweeklySalary: Math.round(emp.salario_mensual / 2),
-          descanso_trabajado: record.descanso_trabajado ?? false // ✅ aquí guardamos el valor
+          descanso_trabajado: record.descanso_trabajado ?? false,// ✅ aquí guardamos el valor
+          diasTarde: [] // ✅ inicializar
         };
       }
       
+const horaEntrada = new Date(record.entrada);
+if (horaEntrada.getDay() === 0) return;
+const horaLimite = new Date(horaEntrada);
+const sede = emp.sede.toUpperCase();
+
+if (sede === "REDES" || sede === "CENTRO") {
+  horaLimite.setHours(8, 4, 59); // Hasta 08:04:59 AM
+} else if (sede === "METROCENTRO" || sede === "NUESTRO ATLANTICO") {
+  horaLimite.setHours(10, 4, 59); // Hasta 10:04:59 AM
+} else {
+  // Si la sede no está definida, asumimos que no aplica control de tardanza
+  horaLimite.setHours(23, 59, 59);
+}
+
+if (horaEntrada > horaLimite) {
+  summaryMap[emp.cedula].diasTarde!.push(horaEntrada.toLocaleDateString());
+}
+
+
       if (emp.sede.toUpperCase() === "REDES" && dayOfMonth === 31) return;
       summaryMap[emp.cedula].datesWorked.add(dayOfMonth);
       if (record.descanso_trabajado) {
@@ -209,7 +230,24 @@ const Dashboard: React.FC = () => {
     setDescuentosDetalle(descuentosData as Discount[]);
   };
 
+    const mostrarDiasTarde = (nombre: string, apellido: string, fechas: string[]) => {
+  if (fechas.length === 0) {
+    Swal.fire('Sin tardanzas', `${nombre} ${apellido} no llegó tarde durante este período.`, 'info');
+    return;
+  }
+
+  const contenido = fechas.map(d => `• ${d}`).join('<br>');
+  Swal.fire({
+    title: `Días tarde de ${nombre} ${apellido}`,
+    html: contenido,
+    icon: 'warning'
+  });
+};
+
+
   const mostrarDetalleDescuentos = (cedula: string, nombre: string, apellido: string) => {
+
+  
     const detalles = descuentosDetalle.filter(d => d.cedula === cedula);
     if (detalles.length === 0) {
       Swal.fire('Sin descuentos', `No se encontraron descuentos para ${nombre} ${apellido}`, 'info');
@@ -266,7 +304,7 @@ const Dashboard: React.FC = () => {
           <table>
             <thead>
               <tr>
-                <th>Empleado</th><th>N° Cuenta</th><th>Banco</th><th>Días Trabajados</th><th>Valor Día</th><th>Valor Quincena</th><th>Descuentos</th><th>Pago Final</th>
+                <th>Empleado</th><th>N° Cuenta</th><th>Banco</th><th>Días Trabajados</th><th>Días Tarde</th><th>Valor Día</th><th>Valor Quincena</th><th>Descuentos</th><th>Pago Final</th>
               </tr>
             </thead>
             <tbody>
@@ -276,6 +314,13 @@ const Dashboard: React.FC = () => {
                   <td>{summary.employee.numero_cuenta}</td>
                   <td>{summary.employee.banco}</td>
                   <td>{formatNumber(summary.effectiveDays)}</td>
+                   <td>
+        {summary.diasTarde && summary.diasTarde.length > 0 ? (
+          <button onClick={() => mostrarDiasTarde(summary.employee.nombre, summary.employee.apellido, summary.diasTarde!)}>
+            {summary.diasTarde.length} día(s)
+          </button>
+        ) : '0'}
+      </td>
                   <td>${formatNumber(summary.dailySalary)}</td>
                   <td>${formatNumber(summary.biweeklySalary)}</td>
                   <td>${formatNumber(summary.descuento || 0)}</td>

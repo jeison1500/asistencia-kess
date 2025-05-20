@@ -7,6 +7,18 @@ import RegisterDiscount from './pages/RegisterDiscount'; // <-- Importar aquí
 import Reports from './pages/Reports';
 
 const App: React.FC = () => {
+
+    const isMobile = window.innerWidth < 768;
+
+  if (isMobile) {
+    return (
+      <div style={{ padding: '2rem', textAlign: 'center' }}>
+        <h2>Esta página no se puede abrir en dispositivos móviles</h2>
+        <p>Por favor, accede desde un ordenador para una mejor experiencia.</p>
+      </div>
+    );
+  }
+
   return (
     <BrowserRouter>
       <Routes>
