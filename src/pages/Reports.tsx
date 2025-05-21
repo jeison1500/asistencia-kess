@@ -135,7 +135,8 @@ const Dashboard: React.FC = () => {
       }
       
 const horaEntrada = new Date(record.entrada);
-if (horaEntrada.getDay() === 0) return;
+const esDomingo = horaEntrada.getDay() === 0;
+
 const horaLimite = new Date(horaEntrada);
 const sede = emp.sede.toUpperCase();
 
@@ -144,13 +145,16 @@ if (sede === "REDES" || sede === "CENTRO") {
 } else if (sede === "METROCENTRO" || sede === "NUESTRO ATLANTICO") {
   horaLimite.setHours(10, 4, 59); // Hasta 10:04:59 AM
 } else {
-  // Si la sede no está definida, asumimos que no aplica control de tardanza
-  horaLimite.setHours(23, 59, 59);
+  horaLimite.setHours(23, 59, 59); // No aplica control
 }
 
-if (horaEntrada > horaLimite) {
+if (!esDomingo && horaEntrada > horaLimite) {
   summaryMap[emp.cedula].diasTarde!.push(horaEntrada.toLocaleDateString());
 }
+
+// if (horaEntrada > horaLimite) {
+//   summaryMap[emp.cedula].diasTarde!.push(horaEntrada.toLocaleDateString());
+// }
 
 
       if (emp.sede.toUpperCase() === "REDES" && dayOfMonth === 31) return;
