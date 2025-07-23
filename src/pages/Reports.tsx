@@ -142,7 +142,7 @@ const sede = emp.sede.toUpperCase();
 
 if (sede === "REDES" || sede === "CENTRO") {
   horaLimite.setHours(8, 4, 59); // Hasta 08:04:59 AM
-} else if (sede === "METROCENTRO" || sede === "NUESTRO ATLANTICO") {
+} else if (sede === "METROCENTRO" || sede === "NUESTRO ATLANTICO" || sede === "CARNAVAL") {
   horaLimite.setHours(10, 4, 59); // Hasta 10:04:59 AM
 } else {
   horaLimite.setHours(23, 59, 59); // No aplica control
@@ -284,6 +284,7 @@ if (!esDomingo && horaEntrada > horaLimite) {
             <option value="NUESTRO ATLANTICO">NUESTRO ATLANTICO</option>
             <option value="REDES">REDES</option>
             <option value="CENTRO">CENTRO</option>
+            <option value="CARNAVAL">CARNAVAL</option>
           </select>
         </label>
         <label>Buscar Empleado:

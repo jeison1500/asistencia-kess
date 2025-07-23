@@ -147,6 +147,7 @@ const RegisterEmployee: React.FC = () => {
         <option value="NUESTRO ATLANTICO">NUESTRO ATLANTICO</option>
         <option value="REDES">REDES</option>
         <option value="CENTRO">CENTRO</option>
+        <option value="CARNAVAL">CARNAVAL</option>
       </select>
       
       <input 
